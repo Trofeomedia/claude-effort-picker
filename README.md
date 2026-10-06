@@ -16,6 +16,11 @@ as that model's default. The menu only lists the levels the current model suppor
 without effort support (e.g. Haiku) look exactly like before. Mouse and keyboard both work: arrow
 keys open and move, Enter picks, Escape closes.
 
+With the mouse over the Claude panel, **Ctrl+Alt+wheel** steps the effort level (wheel up = more effort)
+and **Ctrl+Shift+wheel** steps the model: Sonnet, Opus, Fable (wheel up = towards Fable). It stops at
+the ends instead of wrapping around. VS Code has no global mouse-wheel bindings, so this only works
+while the pointer is over the Claude panel.
+
 Tested with Claude Code 2.1.284 on VS Code for Windows, light and dark themes, narrow and wide panels.
 
 ## Install

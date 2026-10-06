@@ -2,7 +2,7 @@
   "name": "claude-effort-picker",
   "displayName": "Effort Picker for Claude Code",
   "description": "Unofficial community add-on, not affiliated with or endorsed by Anthropic. Splits the Claude Code model pill into the model and a separate effort button with a quick level menu.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "trofeomedia",
   "license": "MIT",
   "repository": {

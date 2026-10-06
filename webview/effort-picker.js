@@ -15,6 +15,39 @@
     console.warn(TAG, msg, err === undefined ? '' : err);
   }
 
+  // Wheel stepping. Pure, so test/wheel.test.js can require this file in Node.
+  // The next level up or down, or null at the end. Auto (undefined) counts as medium.
+  function stepLevel(levels, level, dir) {
+    let i = levels.indexOf(level);
+    if (i === -1) i = Math.max(0, levels.indexOf('medium'));
+    const next = levels[i + dir];
+    return next === undefined || next === level ? null : next;
+  }
+
+  // Wheel up walks this list rightwards; other families (e.g. Haiku) are not part of the cycle.
+  const FAMILIES = ['sonnet', 'opus', 'fable'];
+  function familyOf(m) {
+    const s = (String(m.value) + ' ' + String(m.resolvedModel || '')).toLowerCase();
+    return FAMILIES.find((f) => s.includes(f));
+  }
+  // The model value to switch to, or null. Prefers the plain alias ("opus") over 1M or dated variants.
+  function nextModel(models, current, dir) {
+    const fam = current ? familyOf(current) : undefined;
+    let i = fam ? FAMILIES.indexOf(fam) : -1; // outside the cycle (Haiku) sits below Sonnet
+    for (i += dir; i >= 0 && i < FAMILIES.length; i += dir) {
+      const f = FAMILIES[i];
+      const cands = models.filter((m) => m.value !== 'default' && String(m.value).toLowerCase().includes(f));
+      const pick = cands.find((m) => m.value === f) ?? cands.find((m) => !String(m.value).includes('[1m]')) ?? cands[0];
+      if (pick) return pick.value;
+    }
+    return null;
+  }
+
+  if (typeof module === 'object' && module.exports) {
+    module.exports = { stepLevel, nextModel };
+    return;
+  }
+
   try {
     if (!document.body || !document.head) {
       warn('No document body; leaving Claude Code untouched.');
@@ -83,8 +116,7 @@ html.ccep-on [class*="modelPillEffort_"] { display: none; }
       return null;
     }
 
-    // Mirrors Claude Code's own model lookup. Returns null when the effort button should not show.
-    function readState() {
+    function activeSession() {
       sessions = sessions || findSessions();
       if (!sessions) {
         warn('Claude Code session state not found; leaving the stock pill.');
@@ -96,14 +128,65 @@ html.ccep-on [class*="modelPillEffort_"] { display: none; }
         warn('Unexpected Claude Code session shape; leaving the stock pill.');
         return null;
       }
+      return session;
+    }
+
+    // Mirrors Claude Code's own model lookup: the selectable models and the entry for the current one.
+    function modelInfo(session) {
       const cfg = session.claudeConfig.value;
-      const models = [...(cfg?.models ?? []), ...(cfg?.unavailable_models ?? [])];
+      const available = cfg?.models ?? [];
+      const models = [...available, ...(cfg?.unavailable_models ?? [])];
       const m = session.modelSelection?.value;
       const sel = !m || m === 'default' ? 'default' : m;
       const info = models.find((x) => x.value === sel) ?? models.find((x) => x.value !== 'default' && x.resolvedModel === sel);
+      return { available, info };
+    }
+
+    // Returns null when the effort button should not show.
+    function readState() {
+      const session = activeSession();
+      if (!session) return null;
+      const { info } = modelInfo(session);
       if (!info?.supportsEffort) return null;
       return { level: session.effortLevel.value, levels: info.supportedEffortLevels ?? ['low', 'medium', 'high'] };
     }
+
+    // Ctrl+Alt+wheel steps the effort, Ctrl+Shift+wheel the model (Sonnet, Opus, Fable). Only while the
+    // pointer is over the Claude panel: VS Code gives extensions no global mouse-wheel bindings.
+    // One step at a time: notches that arrive while Claude is still applying the last change are dropped.
+    let wheelBusy = false;
+    function onWheel(e) {
+      if (!e.ctrlKey || e.metaKey || e.altKey === e.shiftKey) return;
+      const delta = e.deltaY || e.deltaX; // Chromium turns Shift+wheel into a horizontal scroll
+      if (!delta) return;
+      e.preventDefault(); // no zoom or scroll for our combos
+      e.stopPropagation();
+      if (wheelBusy) return;
+      const session = activeSession();
+      if (!session) return;
+      const dir = delta < 0 ? 1 : -1;
+      const { available, info } = modelInfo(session);
+      let change = null;
+      if (e.altKey) {
+        const level = info?.supportsEffort ? stepLevel(info.supportedEffortLevels ?? ['low', 'medium', 'high'], session.effortLevel.value, dir) : null;
+        if (level) change = () => session.setEffortLevel(level);
+      } else if (typeof session.setModel === 'function') {
+        const model = nextModel(available, info, dir);
+        if (model) change = () => session.setModel(model);
+      } else {
+        warn('Claude Code has no setModel on the session; model wheel disabled.');
+      }
+      if (!change) return;
+      wheelBusy = true;
+      const release = setTimeout(() => { wheelBusy = false; }, 2000); // a hung change must not block the wheel forever
+      Promise.resolve()
+        .then(change)
+        .catch((err) => console.warn(TAG, 'wheel change failed', err))
+        .finally(() => { clearTimeout(release); wheelBusy = false; });
+    }
+    window.addEventListener('wheel', (e) => {
+      try { onWheel(e); } catch (err) { warn('Wheel handler failed.', err); }
+    }, { capture: true, passive: false });
 
     let pill = null;
     let btn = null;
