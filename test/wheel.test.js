@@ -1,7 +1,10 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { stepLevel, nextModel } = require('../webview/effort-picker');
+const picker = require('../webview/effort-picker');
+const { stepLevel } = picker;
+// Claude's session.setModel wants the whole model entry (it reads .value), never a bare string.
+const nextModel = (...a) => picker.nextModel(...a)?.value ?? null;
 
 const LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'];
 
@@ -49,4 +52,9 @@ test('nextModel from Haiku joins the cycle at the low end, skips missing familie
 test('nextModel picks a full-ID entry when no alias exists', () => {
   const ids = [{ value: 'claude-sonnet-5-5' }, { value: 'claude-opus-5-5' }];
   assert.strictEqual(nextModel(ids, ids[0], 1), 'claude-opus-5-5');
+});
+
+test('nextModel returns the model entry itself, the shape session.setModel needs', () => {
+  assert.strictEqual(picker.nextModel(MODELS, MODELS[1], 1), MODELS[2]);
+  assert.strictEqual(picker.nextModel(MODELS, MODELS[4], 1), null);
 });

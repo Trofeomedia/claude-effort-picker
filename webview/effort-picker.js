@@ -30,7 +30,9 @@
     const s = (String(m.value) + ' ' + String(m.resolvedModel || '')).toLowerCase();
     return FAMILIES.find((f) => s.includes(f));
   }
-  // The model value to switch to, or null. Prefers the plain alias ("opus") over 1M or dated variants.
+  // The model entry to switch to, or null. Returns the entry, not its value: Claude Code's
+  // session.setModel reads .value from it and sends the whole entry to the CLI.
+  // Prefers the plain alias ("opus") over 1M or dated variants.
   function nextModel(models, current, dir) {
     const fam = current ? familyOf(current) : undefined;
     let i = fam ? FAMILIES.indexOf(fam) : -1; // outside the cycle (Haiku) sits below Sonnet
@@ -38,7 +40,7 @@
       const f = FAMILIES[i];
       const cands = models.filter((m) => m.value !== 'default' && String(m.value).toLowerCase().includes(f));
       const pick = cands.find((m) => m.value === f) ?? cands.find((m) => !String(m.value).includes('[1m]')) ?? cands[0];
-      if (pick) return pick.value;
+      if (pick) return pick;
     }
     return null;
   }
